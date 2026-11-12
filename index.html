@@ -1208,6 +1208,11 @@ addEventListener('blur',()=>{for(const k in keys)keys[k]=0;mouse.down=false});
 
 /* ================= ONLINE ================= */
 const PEER_PREFIX='hordefall-v2-';
+/* Optional extra TURN relay (e.g. free ExpressTURN account). Fill in to help players on strict networks connect:
+   {urls:['turn:relay1.expressturn.com:3478','turn:relay1.expressturn.com:3478?transport=tcp','turns:relay1.expressturn.com:443?transport=tcp'],username:'USER',credential:'PASS'} */
+const TURN_EXTRA=[];
+const ICE=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun.cloudflare.com:3478']},{urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'},...TURN_EXTRA];
+const peerOpts=()=>Object.assign({debug:0,config:{iceServers:ICE}},window.PEER_OPTS||{});
 const ETI={},DKI={},WIX={};const ETYPES=Object.keys(EN);ETYPES.forEach((k,i)=>ETI[k]=i);const DKINDS=['coin','meat','vac','nuke','chest'];DKINDS.forEach((k,i)=>DKI[k]=i);const WIDS=[...Object.keys(ITEMS),'_air','_pop','_nuke'];WIDS.forEach((k,i)=>WIX[k]=i);
 const normA=a=>((a+Math.PI)%TAU+TAU)%TAU-Math.PI;
 const nameOf=p=>(NET.role&&p.name)?p.name:'P'+(p.idx+1);
@@ -1230,7 +1235,7 @@ function sendAll(o){const s=typeof o==='string'||o instanceof ArrayBuffer?o:JSON
 function sendSnapAll(buf){for(const e of NET.conns.values())nsend(e.sconn&&e.sconn.open?e.sconn:e.conn,buf)}
 function sendIn(o){nsend(NET.sconn&&NET.sconn.open?NET.sconn:NET.hostConn,o)}
 function onData(d,fn){if(typeof Blob!=='undefined'&&d instanceof Blob){d.arrayBuffer().then(fn);return}if(typeof d==='string'){let o;try{o=JSON.parse(d)}catch(e){return}fn(o);return}if(d instanceof ArrayBuffer){fn(d);return}if(d&&d.buffer instanceof ArrayBuffer){fn(d.buffer.slice(d.byteOffset,d.byteOffset+d.byteLength));return}if(d&&typeof d==='object')fn(d)}
-function netCleanup(){const old={...NET};NET.role=null;try{for(const e of old.conns.values()){e.conn.close();if(e.sconn)e.sconn.close()}}catch(e){}NET.conns=new Map();try{old.hostConn&&old.hostConn.close()}catch(e){}try{old.sconn&&old.sconn.close()}catch(e){}try{old.peer&&old.peer.destroy()}catch(e){}Object.assign(NET,{peer:null,hostConn:null,sconn:null,code:'',started:false,lobby:[],inputs:{},emap:new Map(),pend:{},pendS:{},buf:[],hist:[],off:null,jit:0,cx:0,cy:0});FX.length=0}
+function netCleanup(){const old={...NET};NET.role=null;NET.joined=false;clearTimeout(NET.retryT);try{for(const e of old.conns.values()){e.conn.close();if(e.sconn)e.sconn.close()}}catch(e){}NET.conns=new Map();try{old.hostConn&&old.hostConn.close()}catch(e){}try{old.sconn&&old.sconn.close()}catch(e){}try{old.peer&&old.peer.destroy()}catch(e){}Object.assign(NET,{peer:null,hostConn:null,sconn:null,code:'',started:false,lobby:[],inputs:{},emap:new Map(),pend:{},pendS:{},buf:[],hist:[],off:null,jit:0,cx:0,cy:0});FX.length=0}
 function netStatus(t){const el=$('#netst');if(el){el.style.display='block';el.textContent=t}}
 function netFail(){netCleanup();netStatus("Couldn't load online play. You need internet, and it doesn't work inside the Claude preview. Open the hosted Hordefall link instead.")}
 function netError(e){const t=e&&e.type;netCleanup();netStatus(t==='peer-unavailable'?'No lobby with that code. Check it and try again.':t==='network'||t==='server-error'||t==='socket-error'?"Couldn't reach the online server. Check your internet and try again.":t==='browser-incompatible'?'This browser does not support online play.':'Connection problem ('+(t||'unknown')+'). Try again.')}
@@ -1242,7 +1247,7 @@ const waitHtml=(t,s)=>`<div class="lu"><h1>${t}</h1><div class="lusub" style="fo
 /* ---- host ---- */
 async function hostLobby(){const nm=getName();if(!nm)return;netStatus('Creating lobby...');let P;try{P=await loadPeerLib()}catch(e){return netFail()}
  netCleanup();NET.role='host';NET.myCh=S.chars[S.lastChar]?S.lastChar:'cop';
- const tryOpen=tries=>{const code=genCode();let opened=false;const peer=new P(PEER_PREFIX+code,Object.assign({debug:0},window.PEER_OPTS||{}));NET.peer=peer;
+ const tryOpen=tries=>{const code=genCode();let opened=false;const peer=new P(PEER_PREFIX+code,peerOpts());NET.peer=peer;
   setTimeout(()=>{if(!opened&&NET.peer===peer){netCleanup();netStatus("Couldn't reach the online server. Check your internet. (Online play doesn't work inside the Claude preview.)")}},12000);
   peer.on('open',()=>{opened=true;NET.code=code;NET.started=false;showLobby()});
   peer.on('error',e=>{if(e&&e.type==='unavailable-id'&&tries<6){opened=true;try{peer.destroy()}catch(_){}tryOpen(tries+1)}else if(!opened)netError(e);else if(e&&e.type!=='peer-unavailable')toast('Network hiccup: '+esc(e.type||'?'))});
@@ -1294,16 +1299,28 @@ function buildSnap(){const cx=Math.round(G.center.x),cy=Math.round(G.center.y),R
  const buf=new ArrayBuffer(off+I.byteLength);new DataView(buf).setUint32(0,js.length,true);new Uint8Array(buf,4,js.length).set(js);new Int16Array(buf,off,I.length).set(I);return buf}
 /* ---- client ---- */
 async function joinLobby(){const nm=getName();if(!nm)return;const el=$('#jcode');const code=((el&&el.value)||'').toUpperCase().replace(/[^A-Z]/g,'').slice(0,4);if(code.length!==4){netStatus('Type the 4-letter lobby code.');return}
- netStatus('Connecting...');let P;try{P=await loadPeerLib()}catch(e){return netFail()}
- netCleanup();NET.role='client';NET.myCh=S.chars[S.lastChar]?S.lastChar:'cop';NET.code=code;
- const peer=new P(undefined,Object.assign({debug:0},window.PEER_OPTS||{}));NET.peer=peer;let opened=false;
- setTimeout(()=>{if(!opened&&NET.peer===peer){netCleanup();netStatus("Couldn't reach the online server. Check your internet. (Online play doesn't work inside the Claude preview.)")}},12000);
- peer.on('open',()=>{opened=true;const conn=peer.connect(PEER_PREFIX+code,{reliable:true,serialization:'raw'});NET.hostConn=conn;
-  const to=setTimeout(()=>{if(NET.hostConn===conn&&!conn.open){netCleanup();netStatus('Could not reach that lobby. Check the code, or the host may have closed it.')}},12000);
-  conn.on('open',()=>{clearTimeout(to);nsend(conn,{t:'hello',name:nm,ch:NET.myCh,up:S.up,v:3});netStatus('Joined! Loading lobby...');try{const sc=peer.connect(PEER_PREFIX+code,{reliable:false,serialization:'raw',label:'snap',metadata:{kind:'snap'}});NET.sconn=sc;sc.on('data',d=>onData(d,clientMsg));sc.on('error',()=>{})}catch(_){}});
-  conn.on('data',d=>onData(d,clientMsg));conn.on('close',()=>clientLost());conn.on('error',()=>{})});
- peer.on('error',e=>{if(NET.role!=='client')return;netError(e)});
- peer.on('disconnected',()=>{try{if(NET.peer===peer)peer.reconnect()}catch(_){}})}
+ netStatus('Connecting to the online server...');let P;try{P=await loadPeerLib()}catch(e){return netFail()}
+ netCleanup();NET.role='client';NET.myCh=S.chars[S.lastChar]?S.lastChar:'cop';NET.code=code;NET.joined=false;NET.attempt=0;NET.joinT0=performance.now();NET.nm=nm;
+ const peer=new P(undefined,peerOpts());NET.peer=peer;let opened=false;
+ setTimeout(()=>{if(!opened&&NET.peer===peer){netCleanup();netStatus("Couldn't reach the online server. Check your internet and try again.")}},15000);
+ peer.on('open',()=>{if(opened)return;opened=true;tryJoin()});
+ peer.on('error',e=>{if(NET.role!=='client'||NET.peer!==peer)return;const t=e&&e.type;
+  if(!NET.joined&&t==='peer-unavailable')return scheduleRetry(`Can't find lobby ${code} yet. Check the code, and make sure the host has Hordefall open on screen.`);
+  if(!NET.joined&&(t==='network'||t==='server-error'||t==='socket-error'||t==='disconnected'))return scheduleRetry('Lost the online server for a second, retrying...');
+  if(!NET.joined)netError(e)});
+ peer.on('disconnected',()=>{try{if(NET.peer===peer&&!peer.destroyed)peer.reconnect()}catch(_){}})}
+function scheduleRetry(msg){if(NET.role!=='client'||NET.joined)return;if(msg)netStatus(msg);clearTimeout(NET.retryT);NET.retryT=setTimeout(tryJoin,2500)}
+function tryJoin(){if(NET.role!=='client'||NET.joined||!NET.peer)return;const peer=NET.peer,code=NET.code;
+ if(performance.now()-NET.joinT0>90000){netCleanup();netStatus("Couldn't join after 90 seconds. Check: 1) the code is right, 2) the host keeps Hordefall OPEN ON SCREEN (switching apps on iPhone pauses it), 3) if one of you is on school or work Wi-Fi, switch to cell data.");return}
+ if(peer.disconnected&&!peer.destroyed){try{peer.reconnect()}catch(_){}return scheduleRetry('Reconnecting to the online server...')}
+ NET.attempt++;netStatus(NET.attempt>1?`Still trying (attempt ${NET.attempt})... The host needs Hordefall open on screen.`:'Looking for the lobby...');
+ let conn;try{conn=peer.connect(PEER_PREFIX+code,{reliable:true,serialization:'raw'})}catch(e){return scheduleRetry()}
+ NET.hostConn=conn;let saw=false;
+ const iv=setInterval(()=>{const pc=conn.peerConnection;if(!pc||NET.joined)return;const st=pc.iceConnectionState;if((st==='checking'||st==='new')&&!saw&&pc.remoteDescription){saw=true;netStatus('Lobby found! Connecting to the host...')}if(st==='failed'){clearInterval(iv);clearTimeout(to);try{conn.close()}catch(_){}scheduleRetry("Lobby found, but your two networks couldn't link up. Retrying... (if this keeps happening, one of you switch between Wi-Fi and cell data)")}},400);
+ const to=setTimeout(()=>{clearInterval(iv);if(NET.hostConn===conn&&!conn.open&&!NET.joined){try{conn.close()}catch(_){}scheduleRetry(saw?'The host was found but the connection is slow to open. Retrying...':null)}},saw?14000:11000);
+ conn.on('open',()=>{if(NET.hostConn!==conn||NET.joined)return;clearTimeout(to);clearInterval(iv);NET.joined=true;nsend(conn,{t:'hello',name:NET.nm,ch:NET.myCh,up:S.up,v:3});netStatus('Joined! Loading lobby...');
+  try{const sc=peer.connect(PEER_PREFIX+code,{reliable:false,serialization:'raw',label:'snap',metadata:{kind:'snap'}});NET.sconn=sc;sc.on('data',d=>onData(d,clientMsg));sc.on('error',()=>{})}catch(_){}});
+ conn.on('data',d=>{if(NET.hostConn===conn)onData(d,clientMsg)});conn.on('close',()=>{if(NET.hostConn===conn&&NET.joined)clientLost()});conn.on('error',()=>{})}
 function clientMsg(m){if(NET.role!=='client')return;if(m instanceof ArrayBuffer){applySnap(m);return}if(!m||!m.t)return;
  switch(m.t){
   case 'lobby':NET.lobby=m.list;NET.myIdx=m.me;NET.code=m.code;selAsc=m.asc||0;if(state!=='menu'||scr!=='lobby'){state='menu';G=null;PS=[];enemies=[];$('#hud').style.display='none'}showLobby();break;
@@ -1425,7 +1442,7 @@ function showLobby(){state='menu';scr='lobby';$('#hud').style.display='none';G=n
    <div class="cyc">${i===me?'<button data-a="netCyc" data-d="-1">&lt;</button>':''}<div class="av" style="--c:${c.col}">${iIco(c.w)}</div>${i===me?'<button data-a="netCyc" data-d="1">&gt;</button>':''}</div><div class="cn">${c.name}</div><div class="cp">${c.perk}<br><span style="opacity:.6;font-size:11px">${ITEMS[c.w].name}</span></div></div>`}
   else slots+=`<div class="empty" style="min-height:220px"><div class="jt">P${i+1}</div><small>Waiting for a player...</small></div>`}
  show(`<div class="scr"><div class="top"><button class="btn sm" data-a="netLeave">&larr; Leave</button><h2>${ico('users')} LOBBY</h2><div class="gpill">${ico('cash','#86efac')} $${fmt(S.gold)}</div></div>
- <div class="codebox"><small>LOBBY CODE</small><b>${esc(NET.code)}</b>${host?`<button class="btn sm" data-a="copyCode">${ico('copy')} Copy code</button>`:''}<div class="hint" style="margin-top:2px">Friends open Hordefall &rarr; Online &rarr; type this code</div></div>
+ <div class="codebox"><small>LOBBY CODE</small><b>${esc(NET.code)}</b>${host?`<div class="row"><button class="btn sm" data-a="shareCode">${ico('users')} Send code</button><button class="btn sm" data-a="copyCode">${ico('copy')} Copy</button></div><div class="hint" style="margin-top:2px;color:#fde68a;opacity:1;font-weight:700">Keep Hordefall open on this screen until everyone joins. Switching apps can pause your lobby.</div>`:''}<div class="hint" style="margin-top:2px">Friends open Hordefall &rarr; Online &rarr; type this code</div></div>
  <div class="crew">${slots}</div>
  ${host?`<div class="asc">${S.asc>0?`<button data-a="ascm">&lt;</button><div><b>${selAsc?'NIGHTMARE '+selAsc:'NORMAL'}</b><small>${selAsc?`Zombies +${selAsc*15}% HP · Cash +${selAsc*20}%`:'Standard difficulty'}</small></div><button data-a="ascp">&gt;</button>`:'<small style="opacity:.7">Kill Patient Zero to unlock Nightmare difficulty</small>'}</div><button class="btn big" data-a="netStart">START ${ico('play')}</button><div class="hint">You can start alone, or wait for friends to join.</div>`:`<div class="hint" style="font-size:16px;opacity:.85;margin-top:22px">${selAsc?'Nightmare '+selAsc+' · ':''}Waiting for the host to start...</div>`}</div>`,'','lobby');
  ovKey=e=>{if(host&&e.key==='Enter')A.netStart();else if(e.key==='Escape')A.netLeave();else if(e.code!=='pad'&&(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'))A.netCyc({d:-1});else if(e.code!=='pad'&&(e.key==='ArrowRight'||e.key==='d'||e.key==='D'))A.netCyc({d:1})}}
@@ -1435,8 +1452,13 @@ Object.assign(A,{
  netKick:d=>{const ent=[...NET.conns.values()][(+d.i)-1];if(!ent)return;nsend(ent.conn,{t:'kick'});NET.conns.delete(ent.id);setTimeout(()=>{try{ent.conn.close()}catch(_){}},200);showLobby();lobbyBroadcast()},
  netCyc:d=>{const u=unlocked();const k=u.indexOf(NET.myCh);NET.myCh=u[(k+(+d.d)+u.length)%u.length];sfx.click();if(NET.role==='host'){lobbyBroadcast()}else{nsend(NET.hostConn,{t:'ch',ch:NET.myCh});if(NET.lobby[NET.myIdx])NET.lobby[NET.myIdx].ch=NET.myCh}showLobby()},
  copyCode:()=>{try{navigator.clipboard.writeText(NET.code).then(()=>toast(ico('copy')+' Code copied: '+NET.code),()=>toast('Code: '+NET.code))}catch(e){toast('Code: '+NET.code)}},
+ shareCode:()=>{const txt=`Join my Hordefall lobby! Code: ${NET.code}`,url=location.origin+location.pathname;if(navigator.share){navigator.share({title:'Hordefall',text:txt,url}).catch(()=>{})}else A.copyCode()},
  netLobby:()=>{NET.started=false;state='menu';G=null;PS=[];showLobby();lobbyBroadcast()}
 });
+
+/* ---- keep the matchmaking link alive (iPhone pauses apps in the background) ---- */
+function peerKeepAlive(){const p=NET.peer;if(!p||p.destroyed||!NET.role)return;if(p.disconnected){try{p.reconnect()}catch(_){}}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)peerKeepAlive()});addEventListener('focus',peerKeepAlive);addEventListener('pageshow',peerKeepAlive);setInterval(peerKeepAlive,4000);
 
 /* ================= INSTALLABLE APP ================= */
 let installEvt=null;
