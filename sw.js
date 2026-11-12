@@ -1,4 +1,4 @@
-const V='hordefall-v4';
+const V='hordefall-v5';
 const CORE=['./','./index.html','./manifest.webmanifest','./peerjs.min.js','./icon-192.png','./icon-512.png','./icon-maskable-512.png','./apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V&&k!=='hordefall-fonts').map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
