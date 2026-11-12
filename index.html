@@ -516,7 +516,9 @@ const MAPS={
  city:{name:'The City',d:'Rain-soaked streets where it all started.',wx:'rain',dark:.9,lamp:'#f59e0b',mix:{}},
  snow:{name:'Snowtown',d:'Frozen suburb in a blizzard. Everything moves slower and Tanks love the cold.',wx:'snow',dark:.84,lamp:'#93c5fd',mix:{tank:2.2,brute:1.4,runner:.6},mods:{espd:.9,pspd:.94},hint:'Survive 5:00',test:()=>S.best.time>=300},
  base:{name:'Military Base',d:'Overrun army base. Riot squads, spitters and explosive barrels everywhere.',wx:'dust',dark:.88,lamp:'#fde68a',mix:{riot:2.5,spitter:1.4,tank:1.3},barrels:2,hint:'Kill a mid-boss',test:()=>S.total.mini>=1},
- mall:{name:'Dead Mall',d:'Flickering lights and tight corridors. Packed with Screamers, Runners and Crawlers.',wx:'none',dark:.8,lamp:'#e0f2fe',mix:{runner:1.6,screamer:2.2,crawler:1.6,burrower:0},hint:'Survive 10:00',test:()=>S.best.time>=600}
+ mall:{name:'Dead Mall',d:'Flickering lights and tight corridors. Packed with Screamers, Runners and Crawlers.',wx:'none',dark:.8,lamp:'#e0f2fe',mix:{runner:1.6,screamer:2.2,crawler:1.6,burrower:0},hint:'Survive 10:00',test:()=>S.best.time>=600},
+ hospital:{name:'Abandoned Hospital',d:'Dark wards and narrow halls. Every doorway funnels the horde straight at you.',wx:'none',dark:.9,lamp:'#bbf7d0',mix:{crawler:2,bloater:1.6,screamer:1.5,spitter:1.3,burrower:0,tank:.6},interior:1,hint:'Survive 3:00',test:()=>S.best.time>=180},
+ office:{name:'City Building',d:'An overrun office tower. Cubicles, tight hallways and nowhere to run.',wx:'none',dark:.86,lamp:'#fef9c3',mix:{runner:1.4,riot:1.8,brute:1.2,burrower:0},interior:1,hint:'Play 2 runs',test:()=>S.total.runs>=2}
 };
 const MAP_IDS=Object.keys(MAPS);
 const mapOpen=m=>m==='city'||!!(MAPS[m]&&MAPS[m].test&&MAPS[m].test());
@@ -658,7 +660,7 @@ const rain=Array.from({length:140},()=>({x:Math.random(),y:Math.random(),s:rnd(.
 
 function dailyInfo(){const d=new Date();const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');const seed=parseInt(key.replace(/-/g,''),10);const r=mulberry32(seed*7+3);const ks=Object.keys(CHARS);const ch=ks[Math.floor(r()*ks.length)];const mod=DAILY_MODS[Math.floor(r()*DAILY_MODS.length)];const map=MAP_IDS[Math.floor(r()*MAP_IDS.length)];return{key,seed,ch,mod,map}}
 
-function newGame(lobby,o){rollRun(o);WS=o.ws;BLK=o.blk;LAY=o.lay;OBC=new Map();
+function newGame(lobby,o){rollRun(o);WS=o.ws;BLK=o.blk;LAY=o.lay;OBC=new Map();FF.d=null;FF.t=0;
  const daily=!!o.daily;const seed=daily?o.seed:(Math.random()*1e9|0);RU=mulberry32(seed);const n=lobby.length;const map=MAPS[o.map]?o.map:'city';const mm=MAPS[map].mods||{};o.mods=Object.assign({},o.mods||{});for(const k in mm)o.mods[k]=(o.mods[k]||1)*mm[k];o.mods=modsOf(o.rmods,o.mods);
  G={daily,n,asc:o.asc||0,mods:o.mods||{},time:0,kills:0,gold:0,level:1,xp:0,picks:[],luT:0,combo:0,comboT:0,comboTier:0,bestCombo:0,bar:null,bossDone:false,bossCount:0,endless:false,nextBoss:0,eliteT:75,spawnAcc:0,evIdx:0,gemChain:0,gemChainT:0,flash:0,hurtFlash:0,over:false,deathT:0,vicT:0,ended:false,chk:1,partyDirty:1,center:{x:0,y:0},luFocus:0,dawn:0,map,st:{elites:0,builds:0,revives:0,evos:0,legend:0,wk:{}},bc:{},barT:8,kcam:null,boss1:Math.random()<.5?'butcher':'juggernaut',boss2:Math.random()<.5?'abom':'queen',rmods:o.rmods||[],lay:o.lay,evs:[],spT:rnd(70,95),moon:0,dark:0,cashT:0,zone:null,lastSp:null};G.evs=buildSchedule();
  G.rerolls=daily?0:U('reroll');G.revives=daily?0:U('revive');
@@ -749,6 +751,7 @@ const LAYOUTS={
  open:{n:'Open Ground',d:'Wide open streets with a few wrecks. Room to run.',den:.8,mix:['wreck','rubble','crate','wreck']},
  gridlock:{n:'Gridlock',d:'Wrecked cars and buses jam the streets.',den:2,mix:['wreck','wreck','bus','wreck','crate']},
  barricade:{n:'Barricades',d:'Concrete walls carve the night into chokepoints.',den:1.8,mix:['wallH','wallV','wallL','wallH','wallV','crate'],u:'lay_bar'},
+ interior:{n:'Indoors',d:'Cramped hallways and rooms. Doors funnel the horde.',den:0,mix:[],hide:1},
  rubble:{n:'Rubble Field',d:'Collapsed buildings everywhere. Tight squeezes.',den:2.3,mix:['rubble','rubble','wreck','wallH','wallV','crate'],u:'lay_rub'}
 };
 const RUN_MODS=[
@@ -821,7 +824,7 @@ function checkVUnl(){if(!S.vu)S.vu={};const T=vStats(),got=[];for(const[id,kind,
 function modsOf(ids,base){const o=Object.assign({},base||{});for(const id of ids||[]){const M=RUN_MODS.find(x=>x.id===id);if(!M)continue;for(const k in M.m)o[k]=k==='armorAdd'||k==='crit'?(o[k]||0)+M.m[k]:k==='elite'?Math.min(o[k]||999,M.m[k]):(o[k]||1)*M.m[k]}return o}
 function rollRun(o){if(o.ws!=null)return o;const r=o.daily?mulberry32((o.seed|0)+977):Math.random;
  o.ws=(r()*2e9)|0;o.blk=[8,10,12][Math.floor(r()*3)];
- const lays=Object.keys(LAYOUTS).filter(k=>o.daily||vOpen(LAYOUTS[k].u));o.lay=lays[Math.floor(r()*lays.length)]||'open';
+ const lays=Object.keys(LAYOUTS).filter(k=>(o.daily||vOpen(LAYOUTS[k].u))&&!LAYOUTS[k].hide);o.lay=lays[Math.floor(r()*lays.length)]||'open';if(MAPS[o.map]&&MAPS[o.map].interior)o.lay='interior';
  o.rmods=[];if(!o.daily&&S.set.rmods){const a=RUN_MODS.filter(m=>vOpen(m.u));const n=(r()<.22||(o.asc||0)>=3)?2:1;for(let i=0;i<n&&a.length;i++)o.rmods.push(a.splice(Math.floor(r()*a.length),1)[0].id)}
  return o}
 function nightText(rm,lay){const L=LAYOUTS[lay];return[...(rm||[]).map(id=>{const M=RUN_MODS.find(x=>x.id===id);return M?`<b style="color:${M.c}">${M.n}</b>`:''}),L?`<b style="color:#d6d3d1">${L.n}</b>`:''].filter(Boolean).join(' · ')}
@@ -832,6 +835,7 @@ function introNight(){const L=LAYOUTS[G.lay];for(const id of G.rmods||[]){const 
 const CHK=520;let OBC=new Map(),LAY=null;
 function chunkObs(ci,cj){const k=gkey(ci,cj);let a=OBC.get(k);if(a)return a;a=[];OBC.set(k,a);const L=LAYOUTS[LAY];if(!L)return a;
  let h=hsh(ci*7+13,cj*11+5)|0;const r=()=>{h=Math.imul(h^(h>>>15),2246822507)+0x9e3779b9|0;h^=h>>>13;return(h>>>0)/4294967296};
+ if(LAY==='interior'){interiorObs(ci,cj,a,r);return a}
  const n=Math.floor(L.den*.6+r()*L.den*1.4+.3);
  const add=(x,y,w,hh,t,c)=>{for(const o of a)if(Math.abs(o.x-x)<o.w+w+56&&Math.abs(o.y-y)<o.h+hh+56)return false;if(x-w<ci*CHK+34||x+w>(ci+1)*CHK-34||y-hh<cj*CHK+34||y+hh>(cj+1)*CHK-34)return false;if(Math.abs(x-480)<w+200&&Math.abs(y-480)<hh+200)return false;a.push({x,y,w,h:hh,t,c});return true};
  for(let q=0;q<n*3&&a.length<n;q++){const t=L.mix[Math.floor(r()*L.mix.length)],x=ci*CHK+r()*CHK,y=cj*CHK+r()*CHK,c=Math.floor(r()*1000),rot=r()<.5;
@@ -855,6 +859,7 @@ function freeSpot(x,y,r){const q={x,y};for(let i=0;i<4;i++)if(!solid(q,r))break;
 function drawObs(X0,Y0,X1,Y1){const m=G.map,snow=m==='snow',mall=m==='mall',base=m==='base';
  obsIn(X0-90,Y0-90,X1+90,Y1+90,o=>{if(o.x+o.w<X0||o.x-o.w>X1||o.y+o.h<Y0||o.y-o.h>Y1)return;const w=o.w,h=o.h,c=o.c;ctx.save();ctx.translate(o.x,o.y);
   ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(-w+6,-h+7,w*2,h*2);
+  if(drawFurn(o,G.map==='hospital')){ctx.restore();return}
   const t=o.t.replace('V',''),V=o.t.endsWith('V');if(V){ctx.rotate(Math.PI/2)}const W=V?h:w,H=V?w:h;
   if(t==='wreck'){if(mall){ctx.fillStyle='#27272a';ctx.fillRect(-W,-H,W*2,H*2);ctx.fillStyle=NEON[c%NEON.length];ctx.fillRect(-W,-H,W*2,4);ctx.fillStyle='#3f3f46';ctx.fillRect(-W+6,-H+8,W*2-12,H*2-14)}
    else{ctx.fillStyle=CARS[c%CARS.length];ctx.beginPath();ctx.roundRect?ctx.roundRect(-W,-H,W*2,H*2,8):ctx.rect(-W,-H,W*2,H*2);ctx.fill();ctx.fillStyle='rgba(20,12,8,.55)';ctx.fill();ctx.fillStyle='#0b0d12';ctx.fillRect(-W*.42,-H*.8,W*.9,H*1.6);ctx.fillStyle='#1c1917';for(let k=0;k<3;k++)circ(-W*.6+k*W*.55,(k%2?-1:1)*H*.3,5+(c>>k)%4);ctx.strokeStyle='#00000080';ctx.lineWidth=2;ctx.strokeRect(-W+1,-H+1,W*2-2,H*2-2)}}
@@ -868,6 +873,59 @@ function drawObs(X0,Y0,X1,Y1){const m=G.map,snow=m==='snow',mall=m==='mall',base
   else if(t==='crate'){ctx.fillStyle=base?'#4d5d2e':'#78350f';ctx.fillRect(-W,-H,W*2,H*2);ctx.strokeStyle=base?'#27301a':'#451a03';ctx.lineWidth=2;ctx.strokeRect(-W,-H,W*2,H*2);ctx.beginPath();ctx.moveTo(-W,-H);ctx.lineTo(W,H);ctx.moveTo(W,-H);ctx.lineTo(-W,H);ctx.stroke()}
   if(snow&&t!=='crate'){ctx.fillStyle='rgba(226,232,240,.8)';ctx.fillRect(-W+3,-H+2,W*2-6,Math.max(4,H*.7))}
   ctx.restore()})}
+
+/* ================= INDOOR MAPS: hospital + city building ================= */
+const VERSION='1.5.0';
+const ICH=180; // corridor strip height at the top of every indoor chunk
+function interiorObs(ci,cj,a,r){const x0=ci*CHK,y0=cj*CHK,T=8,hosp=G&&G.map==='hospital';
+ const hwall=(y,gc,gw,c)=>{const g0=gc-gw/2,g1=gc+gw/2;if(g0>x0)a.push({x:(x0+g0)/2,y,w:(g0-x0)/2,h:T,t:'iwall',c,iw:1});if(g1<x0+CHK)a.push({x:(g1+x0+CHK)/2,y,w:(x0+CHK-g1)/2,h:T,t:'iwall',c,iw:1})};
+ const cross=r()<.18,dw=cross?280:125;
+ hwall(y0,x0+95+r()*(CHK-190),dw,0);
+ hwall(y0+ICH,x0+95+r()*(CHK-190),dw,1);
+ const vy0=y0+ICH,vy1=y0+CHK;
+ if(!cross){if(r()<.5){const gc=vy0+85+r()*(vy1-vy0-170),g0=gc-58,g1=gc+58;a.push({x:x0,y:(vy0+g0)/2,w:T,h:(g0-vy0)/2,t:'iwall',iw:1},{x:x0,y:(g1+vy1)/2,w:T,h:(vy1-g1)/2,t:'iwall',iw:1})}else a.push({x:x0,y:(vy0+vy1)/2,w:T,h:(vy1-vy0)/2,t:'iwall',iw:1})}
+ // furniture, kept off the edges so there is always a lane along the walls
+ const n=cross?Math.floor(r()*2):1+Math.floor(r()*3);const fur=[];
+ for(let q=0;q<n*4&&fur.length<n;q++){const t=hosp?(r()<.65?'bed':'cart'):(r()<.55?'desk':'cube');const W=t==='bed'?20:t==='cart'?15:t==='desk'?38:34,H=t==='bed'?38:t==='cart'?15:t==='desk'?18:34;
+  const x=x0+60+W+r()*(CHK-120-2*W),y=vy0+62+H+r()*(vy1-vy0-124-2*H);
+  if(fur.some(o=>Math.abs(o.x-x)<o.w+W+50&&Math.abs(o.y-y)<o.h+H+50))continue;if(Math.abs(x-480)<W+90&&Math.abs(y-480)<H+90)continue;
+  const o={x,y,w:W,h:H,t,c:Math.floor(r()*1000)};fur.push(o);a.push(o)}}
+function wallAt(x,y){let b=false;obsIn(x,y,x,y,o=>{if(o.iw&&Math.abs(x-o.x)<o.w&&Math.abs(y-o.y)<o.h)b=true});return b}
+function los(x0,y0,x1,y1){const d=Math.hypot(x1-x0,y1-y0),n=Math.ceil(d/22);for(let i=1;i<n;i++){const t=i/n;if(wallAt(x0+(x1-x0)*t,y0+(y1-y0)*t))return false}return true}
+/* flow field: zombies path around walls and through doors toward the nearest survivor */
+const FF={t:0,cs:40,ox:0,oy:0,W:0,H:0,d:null};
+const FFN=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+function buildFF(){const cs=FF.cs,R=1300,W=Math.ceil(2*R/cs),H=W,ox=Math.floor((G.center.x-R)/cs)*cs,oy=Math.floor((G.center.y-R)/cs)*cs;
+ const blk=new Uint8Array(W*H);
+ obsIn(ox,oy,ox+W*cs,oy+H*cs,o=>{const p=6,i0=Math.max(0,Math.floor((o.x-o.w-p-ox)/cs)),i1=Math.min(W-1,Math.floor((o.x+o.w+p-ox)/cs)),j0=Math.max(0,Math.floor((o.y-o.h-p-oy)/cs)),j1=Math.min(H-1,Math.floor((o.y+o.h+p-oy)/cs));for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)blk[j*W+i]=1});
+ const D=new Uint16Array(W*H).fill(65535),Q=new Int32Array(W*H);let qh=0,qt=0;
+ for(const p of PS){if(p.down)continue;const i=Math.floor((p.x-ox)/cs),j=Math.floor((p.y-oy)/cs);if(i<0||j<0||i>=W||j>=H)continue;const k=j*W+i;if(D[k]===0)continue;D[k]=0;Q[qt++]=k}
+ while(qh<qt){const k=Q[qh++],i=k%W,nd=D[k]+1;const tryN=n=>{if(!blk[n]&&D[n]===65535){D[n]=nd;Q[qt++]=n}};if(i>0)tryN(k-1);if(i<W-1)tryN(k+1);if(k>=W)tryN(k-W);if(k<W*(H-1))tryN(k+W)}
+ FF.ox=ox;FF.oy=oy;FF.W=W;FF.H=H;FF.d=D}
+function ffDir(x,y,d){if(d<70)return null;const cs=FF.cs,W=FF.W,i=Math.floor((x-FF.ox)/cs),j=Math.floor((y-FF.oy)/cs);if(i<1||j<1||i>=W-1||j>=FF.H-1)return null;
+ const D=FF.d,c=D[j*W+i];if(c!==65535&&c<=1)return null;let best=c,bi=0,bj=0;
+ for(const[di,dj]of FFN){const v=D[(j+dj)*W+i+di];if(v<best){if(c!==65535&&di&&dj&&(D[j*W+i+di]===65535||D[(j+dj)*W+i]===65535))continue;best=v;bi=di;bj=dj}}
+ if(best===c||best===65535)return null;const tx=FF.ox+(i+bi+.5)*cs-x,ty=FF.oy+(j+bj+.5)*cs-y,l=Math.hypot(tx,ty)||1;return[tx/l,ty/l]}
+function drawInterior(x0,y0,x1,y1,m){lamps=[];const hosp=m==='hospital';
+ tiles(x0,y0,x1,y1,(x,y,h,mi,mj,i,j)=>{const ly=mod(y,CHK),hall=ly<ICH;
+  if(hosp){ctx.fillStyle=hall?(((i+j)&1)?'#26302b':'#232c27'):(((i+j)&1)?'#1f2723':'#1c231f');ctx.fillRect(x,y,TS+1,TS+1);ctx.strokeStyle=hall?'#1b221e':'#171d19';ctx.lineWidth=1.5;ctx.strokeRect(x+.5,y+.5,TS/2,TS/2);ctx.strokeRect(x+TS/2,y+TS/2,TS/2,TS/2);
+   if(hall&&ly<=ICH/2&&ly+TS>ICH/2){ctx.fillStyle='#16a34a55';ctx.fillRect(x,y+ICH/2-ly-3,TS+1,6)}
+   if(h%13===0){ctx.fillStyle='#4a0d0d88';ctx.beginPath();ctx.ellipse(x+(h>>>4)%60+18,y+(h>>>9)%60+18,16,7,(h%5)/2,0,TAU);ctx.fill()}
+   if(h%17===2){ctx.fillStyle='#d6d3d133';ctx.fillRect(x+(h>>>3)%70+8,y+(h>>>8)%70+8,10,13)}}
+  else{ctx.fillStyle=hall?(((i+j)&1)?'#2a2722':'#27241f'):['#1b1d27','#1c1e28','#1a1c25'][h%3];ctx.fillRect(x,y,TS+1,TS+1);
+   if(hall){ctx.strokeStyle='#1f1c18';ctx.lineWidth=1.5;ctx.strokeRect(x+.5,y+.5,TS,TS)}else if(h%3===0){ctx.fillStyle='#262938';for(let k=0;k<6;k++)ctx.fillRect(x+((h>>>(k+2))%86)+4,y+((h>>>(k+8))%86)+4,3,3)}
+   if(h%19===0){ctx.fillStyle='#e7e5e433';ctx.save();ctx.translate(x+(h>>>4)%70+12,y+(h>>>9)%70+12);ctx.rotate((h%7)/3);ctx.fillRect(-6,-8,12,16);ctx.restore()}
+   if(h%23===0){ctx.fillStyle='#3f0a0a88';circ(x+(h>>>5)%60+18,y+(h>>>10)%60+18,11)}}});
+ const c0=Math.floor(x0/CHK)-1,c1=Math.floor(x1/CHK)+1,d0=Math.floor(y0/CHK)-1,d1=Math.floor(y1/CHK)+1;
+ for(let ci=c0;ci<=c1;ci++)for(let cj=d0;cj<=d1;cj++){const h=hsh(ci*3+1,cj*5+2);lamps.push([ci*CHK+130+(h%3)*130,cj*CHK+ICH/2]);if(h%3!==0)lamps.push([ci*CHK+CHK/2,cj*CHK+ICH+(CHK-ICH)/2])}
+ for(const[x,y]of lamps){ctx.fillStyle=hosp?'#bbf7d0':'#fef9c3';ctx.fillRect(x-14,y-3,28,6)}}
+function drawFurn(o,hosp){const t=o.t,w=o.w,h=o.h,c=o.c;
+ if(t==='iwall'){ctx.fillStyle=hosp?'#3c4a42':'#4a453e';ctx.fillRect(-w-1,-h-1,w*2+2,h*2+2);ctx.fillStyle=hosp?'#8fa595':'#9c9284';ctx.fillRect(-w,-h,w*2,h*2*.55);return true}
+ if(t==='bed'){ctx.fillStyle='#64748b';ctx.fillRect(-w,-h,w*2,h*2);ctx.fillStyle='#cbd5e1';ctx.fillRect(-w+3,-h+3,w*2-6,h*2-6);ctx.fillStyle='#f1f5f9';ctx.fillRect(-w+5,-h+5,w*2-10,10);if(c%3===0){ctx.fillStyle='#7f1d1d99';circ(-2,6,7)}return true}
+ if(t==='cart'){ctx.fillStyle='#94a3b8';ctx.fillRect(-w,-h,w*2,h*2);ctx.fillStyle='#475569';ctx.fillRect(-w+3,-h+3,w*2-6,h*2-6);ctx.fillStyle='#ef4444';ctx.fillRect(-3,-7,6,14);ctx.fillRect(-7,-3,14,6);return true}
+ if(t==='desk'){ctx.fillStyle='#5b3a1d';ctx.fillRect(-w,-h,w*2,h*2);ctx.fillStyle='#78502b';ctx.fillRect(-w+2,-h+2,w*2-4,h*2-4);ctx.fillStyle='#0b0d12';ctx.fillRect(-10,-h+3,20,7);ctx.fillStyle=c%2?'#38bdf855':'#0b0d12';ctx.fillRect(-8,-h+4,16,5);ctx.fillStyle='#e7e5e4aa';ctx.fillRect(w-16,-4,9,11);return true}
+ if(t==='cube'){ctx.fillStyle='#334155';ctx.fillRect(-w,-h,w*2,h*2);ctx.fillStyle='#1e2533';ctx.fillRect(-w+5,-h+5,w*2-10,h*2-10);ctx.fillStyle='#5b3a1d';ctx.fillRect(-w+7,-h+7,w*2-14,12);ctx.fillStyle='#0b0d12';ctx.fillRect(-6,-h+8,12,6);return true}
+ return false}
 
 /* ---- event schedule: hordes shuffled every run, plus random special events ---- */
 function buildSchedule(){const r=RU,pools={1:[],2:[],3:[]};HORDES.forEach((h,i)=>pools[h.t].push(i));for(const k in pools){const p=pools[k];for(let i=p.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[p[i],p[j]]=[p[j],p[i]]}}
@@ -958,7 +1016,7 @@ function comboBonus(){return G.comboTier?CB[G.comboTier-1]:0}
 function levelBlast(){sfx.levelBlast();for(const p of PS){if(p.down)continue;p.inv=Math.max(p.inv,.6);ring(p.x,p.y,20,240,.45,'#bef264',8,1);for(const e of enemies){if(e.dead||e.big)continue;const dx=e.x-p.x,dy=e.y-p.y,d=Math.hypot(dx,dy)||1;if(d<220){e.kx+=dx/d*550;e.ky+=dy/d*550}}}}
 
 /* ================= WEAPONS ================= */
-function gunTarget(p,range){const t=nearestN(p,1,range);return t[0]||null}
+function gunTarget(p,range){if(LAY!=='interior'){const t=nearestN(p,1,range);return t[0]||null}for(const e of nearestN(p,6,range))if(los(p.x,p.y,e.x,e.y))return e;return null}
 function updateWeapon(p,w,dt){const id=w.id,s=ws(p,w),o=p.idx;
  if(GUNS[id]){if(w.ammo==null)w.ammo=s.mag;
   if(w.rl>0){w.rl-=dt;w.rlT=s.rl;if(w.rl<=0){w.ammo=s.mag;sfx.reload()}return}
@@ -1064,6 +1122,7 @@ function update(dt){
   groanT-=dt;if(groanT<=0){groanT=rnd(2,5);if(enemies.length>5)sfx.groan()}
  }
  updateVariety(dt);
+ if(LAY){FF.t-=dt;if(FF.t<=0){FF.t=.35;buildFF()}}else FF.d=null;
  buildGrid();
  const farD=Math.max(VW,VH)/camZ*1.15;
  for(const e of enemies){if(e.dead)continue;
@@ -1072,7 +1131,7 @@ function update(dt){
   if(e.mod==='regen'&&G.time-e.lht>1.2&&e.hp<e.maxHp)e.hp=Math.min(e.maxHp,e.hp+e.maxHp*.04*dt);
   if(e.burnT>0){e.burnT-=dt;e.burnAcc+=e.burnD*dt;if(Math.random()<dt*12)parts.push({x:e.x+rnd(-6,6),y:e.y+rnd(-6,6),vx:0,vy:-50,l:.4,ml:.4,c:Math.random()<.5?'#f97316':'#fde047',s:3,fire:1});if(e.burnAcc>=4||e.burnT<=0){const a=e.burnAcc;e.burnAcc=0;hurt(e,a,e.burnW,0,0,e.burnO,true);if(e.dead)continue}}
   const tp=nearestPlayer(e.x,e.y)||PS[0];
-  const dx=tp.x-e.x,dy=tp.y-e.y,d=Math.hypot(dx,dy)||1;let sp=e.spd*(e.slowT>0?1-e.slow:1);if(e.rage>0){e.rage-=dt;sp*=1.45}
+  let dx=tp.x-e.x,dy=tp.y-e.y;const d=Math.hypot(dx,dy)||1;if(FF.d&&!e.big&&!e.under&&!e.loot){const g=ffDir(e.x,e.y,d);if(g){dx=g[0]*d;dy=g[1]*d}}let sp=e.spd*(e.slowT>0?1-e.slow:1);if(e.rage>0){e.rage-=dt;sp*=1.45}
   e.fa+=angDiff(e.fa,Math.atan2(dy,dx))*Math.min(1,dt*(e.type==='riot'?3:6));
   if(e.under){e.emT+=dt;e.x+=dx/d*sp*1.35*dt;e.y+=dy/d*sp*1.35*dt;if(d<85)emerge(e);else if(Math.hypot(e.x-cx,e.y-cy)>farD){const[x,y]=spawnPos();e.x=x;e.y=y}continue}
   if(e.big||e.type==='tank')bossAI(e,dt,dx,dy,d,sp,tp);
@@ -1092,12 +1151,12 @@ function update(dt){
  updateBuilds(dt);
  for(const a of apools){a.t+=dt;if(Math.random()<dt*a.r*.12)parts.push({x:a.x+rnd(-a.r,a.r)*.7,y:a.y+rnd(-a.r,a.r)*.6,vx:0,vy:-rnd(10,30),l:.6,ml:.6,c:'#a3e635',s:rnd(2,4)})}
  apools=apools.filter(a=>a.t<a.T);
- for(const pr of proj){pr.px=pr.x;pr.py=pr.y;pr.x+=pr.vx*dt;pr.y+=pr.vy*dt;pr.life-=dt;
+ for(const pr of proj){pr.px=pr.x;pr.py=pr.y;pr.x+=pr.vx*dt;pr.y+=pr.vy*dt;pr.life-=dt;if(LAY==='interior'&&wallAt(pr.x,pr.y)){pr.life=0;pr.pierce=-1;if(Math.random()<.4)burst(pr.x,pr.y,'#d6d3d1',2,120,.5);continue}
   if(pr.pierce>=0)query(pr.x,pr.y,pr.r,e=>{if(pr.pierce<0||pr.hit.has(e))return;pr.hit.add(e);const sp=Math.hypot(pr.vx,pr.vy)||1;let dm=pr.dmg;
    if(e.type==='riot'&&-(pr.vx*Math.cos(e.fa)+pr.vy*Math.sin(e.fa))/sp>.35){dm*=.2;burst(pr.x,pr.y,'#e2e8f0',3,180,.6);sfx.tink()}
    hurt(e,dm,pr.wid,pr.vx/sp*pr.kb,pr.vy/sp*pr.kb,pr.o);if(pr.ex&&Math.random()<.22)miniBoom(pr.x,pr.y,pr.dmg*.6,pr.o);if(pr.burn){e.burnT=3;e.burnD=pr.burn*PS[pr.o].might;e.burnW=pr.wid;e.burnO=pr.o}pr.pierce--;if(pr.pierce<0)blood(pr.x,pr.y,3,140)})}
  proj=proj.filter(pr=>pr.life>0&&pr.pierce>=0);
- for(const b of eproj){b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;if(Math.random()<dt*20)parts.push({x:b.x,y:b.y,vx:0,vy:0,l:.3,ml:.3,c:'#84cc16',s:3});for(const p of PS){if(p.down)continue;if(Math.hypot(p.x-b.x,p.y-b.y)<p.r+b.r){damagePlayer(p,b.dmg);b.life=0;blood(b.x,b.y,8,150,'#65a30d');break}}if(b.life<=0&&!b.splat){b.splat=1;decal(b.x,b.y,b.acid?30:10,'#22330c');if(b.acid&&apools.length<14){apools.push({x:b.x,y:b.y,r:72,t:0,T:7});ringFill(b.x,b.y,60,.3,'#84cc16')}}}
+ for(const b of eproj){b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;if(LAY==='interior'&&wallAt(b.x,b.y))b.life=0;if(Math.random()<dt*20)parts.push({x:b.x,y:b.y,vx:0,vy:0,l:.3,ml:.3,c:'#84cc16',s:3});for(const p of PS){if(p.down)continue;if(Math.hypot(p.x-b.x,p.y-b.y)<p.r+b.r){damagePlayer(p,b.dmg);b.life=0;blood(b.x,b.y,8,150,'#65a30d');break}}if(b.life<=0&&!b.splat){b.splat=1;decal(b.x,b.y,b.acid?30:10,'#22330c');if(b.acid&&apools.length<14){apools.push({x:b.x,y:b.y,r:72,t:0,T:7});ringFill(b.x,b.y,60,.3,'#84cc16')}}}
  eproj=eproj.filter(b=>b.life>0);
  for(const b of bombs){b.t+=dt;if(b.t>=b.T&&!b.done){b.done=1;explode(b)}}
  bombs=bombs.filter(b=>!b.done);
@@ -1169,7 +1228,7 @@ const TS=96;let BLK=10,WS=0;
 function hsh(i,j){let h=Math.imul(i,374761393)+Math.imul(j,668265263)+WS|0;h=Math.imul(h^(h>>>13),1274126177);return(h^(h>>>16))>>>0}
 const CARS=['#7f1d1d','#1e3a5f','#3f3f46','#57534e','#365314','#713f12','#0f766e','#e7e5e4'];
 let lamps=[];
-function drawWorld(x0,y0,x1,y1){const m=G&&G.map||'city';if(m==='snow')return drawSnow(x0,y0,x1,y1);if(m==='base')return drawBase(x0,y0,x1,y1);if(m==='mall')return drawMall(x0,y0,x1,y1);return drawCity(x0,y0,x1,y1)}
+function drawWorld(x0,y0,x1,y1){const m=G&&G.map||'city';if(m==='hospital'||m==='office')return drawInterior(x0,y0,x1,y1,m);if(m==='snow')return drawSnow(x0,y0,x1,y1);if(m==='base')return drawBase(x0,y0,x1,y1);if(m==='mall')return drawMall(x0,y0,x1,y1);return drawCity(x0,y0,x1,y1)}
 function tiles(x0,y0,x1,y1,fn){const i0=Math.floor(x0/TS),i1=Math.floor(x1/TS),j0=Math.floor(y0/TS),j1=Math.floor(y1/TS);for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)fn(i*TS,j*TS,hsh(i,j),mod(i,BLK),mod(j,BLK),i,j)}
 function lampDots(c){for(const[x,y]of lamps){ctx.fillStyle='#0a0a0c';ctx.beginPath();ctx.arc(x,y,5,0,TAU);ctx.fill();ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,2.5,0,TAU);ctx.fill()}}
 function pine(x,y,s,h){ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(x+5,y+6,22*s,18*s,0,0,TAU);ctx.fill();for(let k=0;k<3;k++){const R=(24-k*7)*s;ctx.fillStyle=k%2?'#1f3d2b':'#24472f';ctx.beginPath();for(let q=0;q<8;q++){const a=q/8*TAU+h%5*.2;ctx.lineTo(x+Math.cos(a)*R,y+Math.sin(a)*R);ctx.lineTo(x+Math.cos(a+.39)*R*.6,y+Math.sin(a+.39)*R*.6)}ctx.closePath();ctx.fill()}ctx.fillStyle='#e2e8f0cc';for(let q=0;q<5;q++){const a=q*1.3+h%7;circ(x+Math.cos(a)*10*s,y+Math.sin(a)*10*s,3.2*s)}circ(x,y,4*s)}
@@ -1322,7 +1381,7 @@ function drawDrop(d){const b=Math.sin(perfT*4+d.x)*2;
  ctx.fillStyle='#0b0d08dd';circ(d.x,d.y+b,13);ctx.strokeStyle=m[1];ctx.lineWidth=2;ctx.beginPath();ctx.arc(d.x,d.y+b,13,0,TAU);ctx.stroke();drawIco(m[0],m[1],d.x,d.y+b,18)}
 
 /* ================= RENDER ================= */
-function lampF(x,y){if(!G||G.map!=='mall')return 1;const h=hsh(x|0,y|0);return h%9===0?(Math.sin(perfT*23+h)>.2?1:.15):1}
+function lampF(x,y){if(!G||(G.map!=='mall'&&G.map!=='hospital'))return 1;const h=hsh(x|0,y|0);return h%9===0?(Math.sin(perfT*23+h)>.2?1:.15):1}
 function render(dt){perfT+=dt;
  ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle='#0a0b0d';ctx.fillRect(0,0,VW,VH);
  const live=G&&state!=='menu'&&PS.length;
@@ -1563,7 +1622,7 @@ function showMenu(){if(NET.role)netCleanup();checkVUnl();state='menu';G=null;PS=
  show(`<div class="menu"><div class="logo"><span class="a">HORDE</span><span class="b">FALL</span></div><div class="tag">Survive the night</div>
  <div class="mbtns"><button class="btn big" data-a="crew">${ico('play')} PLAY</button><button class="btn online" data-a="online">${ico('users')} ONLINE · HOST OR JOIN</button><button class="btn daily" data-a="daily"><span style="display:flex;gap:8px;align-items:center">${ico('bio')} DAILY OUTBREAK</span><small>${db?'Your best today: '+fmt(db.s):'Same run for everyone today · solo'}</small></button><div class="row"><button class="btn" data-a="forge">${ico('wrench')} Safehouse</button><button class="btn" data-a="codex">${ico('book')} Field Guide</button></div><div class="row mini"><button class="btn sm" data-a="missions">${ico('target')} Missions <small style="opacity:.7">${misCount()}</small></button><button class="btn sm" data-a="locker">${ico('shirt')} Locker</button></div><div class="row mini"><button class="btn sm" data-a="trophies">${ico('trophy')} Trophies</button><button class="btn sm" data-a="unlocks">${ico('star','#facc15')} Unlocks <small style="opacity:.7">${VUNL.filter(v=>S.vu&&S.vu[v[0]]).length}/${VUNL.length}</small></button></div><div class="row mini"><button class="btn sm" data-a="settings">${ico('gear')} Settings</button></div>${isApp()?'':`<button class="btn sm" data-a="install" style="opacity:.9">${ico('home')} Install as app</button>`}</div>
  <div class="mstats">${ico('cash','#86efac')} $${fmt(S.gold)} &nbsp;·&nbsp; Best ${mmss(S.best.time)} &nbsp;·&nbsp; ${fmt(S.best.kills)} kills${S.asc?` &nbsp;·&nbsp; Nightmare ${S.asc}`:''}</div>
- <div class="ctrls">Move: WASD / arrows / left stick / drag &nbsp;·&nbsp; Guns auto-aim. Hold the mouse or use the right stick to aim yourself.<br>Build with cash: Q barricade · E turret (controller X / Y, or the buttons on screen). 1–4 players on one screen.</div>
+ <div class="ctrls">Move: WASD / arrows / left stick / drag &nbsp;·&nbsp; Guns auto-aim. Hold the mouse or use the right stick to aim yourself.<br>Build with cash: Q barricade · E turret (controller X / Y, or the buttons on screen). 1–4 players on one screen.<br><span style="opacity:.75">Hordefall v${VERSION}</span></div>
  <button class="mute" data-a="mute">${S.mute?ico('mute'):ico('sound')}</button></div>`,'menubg','menu');
  ovKey=e=>{if(e.key===' '||e.key==='Enter')showCrew()}}
 const unlocked=()=>Object.keys(CHARS).filter(k=>S.chars[k]);
@@ -1577,7 +1636,7 @@ function showSettings(back){if(back)setBack=back;
  <div class="setrow"><div><b>All sound</b><small>Same as pressing M</small></div><button class="tog ${S.mute?'':'on'}" data-a="mute">${S.mute?'OFF':'ON'}</button></div>
  ${sl('sfx','Sound effects','Guns, zombies, explosions')}${sl('mus','Music','Plays music.mp3 in runs and menu.mp3 in menus, if you add them')}${sl('shake','Screen shake','How hard the camera shakes')}
  ${tg('flash','Screen flashes','White and red flashes, lightning')}${tg('nums','Damage numbers','Numbers that pop off zombies')}${tg('rmods','Night modifiers','A random rule each run, like Fog Night or Payday. The Daily Outbreak keeps its own rule.')}${tg('hap','Vibration','Controller rumble and Android phones. iPhone web apps can\'t vibrate.')}
- <div class="row" style="margin-top:14px"><button class="btn big" data-a="setDone">DONE</button></div></div>`,'','settings');
+ <div class="row" style="margin-top:14px"><button class="btn big" data-a="setDone">DONE</button></div><div class="hint">Hordefall v${VERSION}</div></div>`,'','settings');
  ovKey=e=>{if(e.key==='Escape')A.setDone()}}
 function cosOwned(t,c){return(!c.cost&&!c.ach)||!!S.cos.own[t+':'+c.id]||!!(c.ach&&S.ach[c.ach])}
 function showLocker(){const sec=(t,title)=>`<h3>${title}</h3><div class="mgrid">${COS[t].map(c=>{const own=cosOwned(t,c),on=S.cos[t]===c.id,an=c.ach?(ACH.find(a=>a[0]===c.ach)||[])[1]:'';
@@ -1598,7 +1657,7 @@ function showUnlocks(){checkVUnl();const it=(nm,d,col,u)=>{const ok=vOpen(u),h=u
  show(`<div class="scr codex"><div class="top"><button class="btn sm" data-a="menu">&larr;</button><h2>${ico('star')} UNLOCKS</h2><div class="gpill">${nOk}/${VUNL.length}</div></div>
  ${H('Night modifiers','one or two random rules every run')}<div class="cgrid">${RUN_MODS.map(m=>it(m.n,m.d,m.c,m.u)).join('')}</div>
  ${H('Random events','pop up in the middle of a run')}<div class="cgrid">${Object.values(SPECIALS).map(x=>it(x.n,x.d,'#38bdf8',x.u)).join('')}</div>
- ${H('Map layouts','every run builds a new map')}<div class="cgrid">${Object.values(LAYOUTS).map(l=>it(l.n,l.d,'#d6d3d1',l.u)).join('')}</div>
+ ${H('Map layouts','every run builds a new map')}<div class="cgrid">${Object.values(LAYOUTS).filter(l=>!l.hide).map(l=>it(l.n,l.d,'#d6d3d1',l.u)).join('')}</div>
  ${H('Survivors','pick them in Play')}<div class="cgrid">${chars}</div>
  <div class="hint">Night modifiers can be turned off in Settings. The Daily Outbreak uses its own rule.</div><div class="row" style="margin-top:12px"><button class="btn big" data-a="crew">${ico('play')} PLAY</button></div></div>`,'','unlocks');
  ovKey=e=>{if(e.key==='Escape')showMenu()}}
@@ -1728,7 +1787,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='p
 addEventListener('blur',()=>{for(const k in keys)keys[k]=0;mouse.down=false});
 
 /* ================= ONLINE ================= */
-const PEER_PREFIX='hordefall-v3-';
+const PEER_PREFIX='hordefall-'+VERSION.replace(/\./g,'-')+'-';
 /* Optional extra TURN relay (e.g. free ExpressTURN account). Fill in to help players on strict networks connect:
    {urls:['turn:relay1.expressturn.com:3478','turn:relay1.expressturn.com:3478?transport=tcp','turns:relay1.expressturn.com:443?transport=tcp'],username:'USER',credential:'PASS'} */
 const TURN_EXTRA=[];
